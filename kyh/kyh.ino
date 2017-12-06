@@ -1,3 +1,4 @@
+#include <avr/pgmspace.h>
 #include <SoftwareSerial.h>
 #include "DHT.h"
 
@@ -9,59 +10,81 @@
 #define DHTPIN 4
 #define DHTTYPE DHT22
 
-#define SSID "wifi_ssid"
-#define PASSWORD "wifi_password"
+#define SSID ""
+#define PASSWORD ""
 
-#define HOST "host_ip"
+#define HOST "192.168.0.16"
+#define PORT "7575"
 
 SoftwareSerial wifi(6, 7);
 DHT dht(DHTPIN, DHTTYPE);
 bool isAvailable = false;
 
 void connectWifi();
-void requestGet(const char *data);
+void requestGet(const char *path);
 
 void setup() {
   Serial.begin(9600);
   wifi.begin(9600);
   dht.begin();
   connectWifi();
-  requestGet("/company/readServices");
 }
 
 void loop() {
+  String url;
   if (!isAvailable) return;
   
   // This section is about gas sensor
   int gas = analogRead(GAS);
   Serial.println(gas);
+  url = "/gas/";
+  url += gas;
+  requestGet(url.c_str());
+  delay(250);
 
   // This section is about detect fire
   int fire = digitalRead(FIRE);
-  if (digitalRead(fire) == HIGH) {
+  if (fire == LOW) {
     Serial.println("detect fire");
+    url = "/fire/1";
   } else {
     Serial.println("safe for fire");
+    url = "/fire/0";
   }
+  requestGet(url.c_str());
+  delay(250);
 
   // This section is about the rain
   int rainwater = analogRead(RAINWATER);
   Serial.println(rainwater);
+  url = "/rainwater/";
+  url += rainwater;
+  requestGet(url.c_str());
+  delay(250);
 
   // This section is about DHT22 sensor
   float humidity = dht.readHumidity();
   float temperature = dht.readTemperature();
+  delay(250);
 
   if (!isnan(humidity) && !isnan(temperature)) {
     Serial.println(humidity);
     Serial.println(temperature);
+    url = "/humidity/";
+    url += humidity;  
+    requestGet(url.c_str());
+    
+    delay(250);
+    url = "/temperature/";
+    url += temperature;
+    requestGet(url.c_str());
   }
 
+  delay(250);
+
   // This section is about dust sensor
-  float dust = analogRead(DUST);
-  Serial.println(dust);
-  
-  delay(1000);
+  //float dust = analogRead(DUST);
+  //Serial.println(dust);
 }
 
 // connect wifi! 
@@ -78,9 +101,9 @@ void connectWifi() {
 // request host/path
 void requestGet(const char *path) {
   char cmd[50];
-  char data[1024];
+  String data;
   
-  sprintf(cmd, "AT+CIPSTART=\"TCP\",\"%s\",80", HOST);
+  sprintf(cmd, "AT+CIPSTART=\"TCP\",\"%s\",%s", HOST, PORT);
   wifi.println(cmd);
 
   while(!wifi.available());
@@ -91,15 +114,18 @@ void requestGet(const char *path) {
     return;
   }
 
-  sprintf(data, "GET %s HTTP/1.1\r\nHost: %s\r\n\r\n", path, HOST);
+  data = "GET ";
+  data += path;
+  data += " HTTP/1.1\r\nHost: ";
+  data += HOST;
+  data += "\r\n\r\n";
+  sprintf(cmd, "AT+CIPSEND=%d", data.length());
   
-  sprintf(cmd, "AT+CIPSEND=%d", strlen(data));
   wifi.println(cmd);
   wifi.println(data);
 
-  while(wifi.available())
-    Serial.println(wifi.readString()); // this is not working...couldn't receive data but success to request~
-  
-  wifi.println("AT+CIPCLOSE");
+  while(wifi.available()) 
+    wifi.read();
+  //wifi.println("AT+CIPCLOSE");
 }
 
